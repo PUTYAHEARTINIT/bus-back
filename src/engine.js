@@ -10,10 +10,11 @@ const ROAD_WIDTH          = 21;
 const ROAD_LOOP           = ROAD_SEGMENT_COUNT * ROAD_SEGMENT_LENGTH;
 const SKY_COLOR           = 0x080c14;
 
-const roadSegments   = [];
-const buildingGroups = [];
-let shakeMagnitude   = 0;
-let cameraLean       = 0;
+const roadSegments    = [];
+const buildingGroups  = [];
+const intersectionGrps = [];
+let shakeMagnitude    = 0;
+let cameraLean        = 0;
 
 // ── Canvas textures ───────────────────────────────────────────────────────────
 
@@ -162,6 +163,10 @@ export function init(canvas) {
   for (let i = 0; i < ROAD_SEGMENT_COUNT; i++) {
     addCityBlock(-i * ROAD_SEGMENT_LENGTH);
   }
+
+  // ── Intersections (every 400m — 2 per 800-unit loop) ──
+  createIntersection(-200);
+  createIntersection(-600);
 
   // ── Skyline ──
   createSkyline();
@@ -407,6 +412,147 @@ function makeParkedCar() {
   return g;
 }
 
+// ── Intersections ─────────────────────────────────────────────────────────────
+
+const INTER_HALF = 22;   // half-length of intersection zone (44 units total)
+const SIDE_W     = 30;   // side-street road width
+
+function buildTrafficPole(x, z, group, lightRefs) {
+  const poleMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 7.5, 6), poleMat);
+  pole.position.set(x, 3.75, z);
+  group.add(pole);
+
+  const armDir = x < 0 ? 1 : -1;
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.8, 4), poleMat);
+  arm.rotation.z = Math.PI / 2;
+  arm.position.set(x + armDir * 1.4, 7.5, z);
+  group.add(arm);
+
+  const hx = x + armDir * 2.8;
+  const hy = 7.35;
+  const housing = new THREE.Mesh(
+    new THREE.BoxGeometry(0.44, 1.45, 0.42),
+    new THREE.MeshLambertMaterial({ color: 0x0a0a0a })
+  );
+  housing.position.set(hx, hy, z);
+  group.add(housing);
+
+  // Red top, Yellow mid, Green bottom
+  const bulbColors  = [0xff2200, 0xffaa00, 0x00ff44];
+  const bulbOffsets = [0.44, 0, -0.44];
+  const bulbs = [];
+  for (let i = 0; i < 3; i++) {
+    const bMat = new THREE.MeshBasicMaterial({
+      color: bulbColors[i],
+      opacity: i === 0 ? 1.0 : 0.12,
+      transparent: true
+    });
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.13, 6, 6), bMat);
+    bulb.position.set(hx, hy + bulbOffsets[i], z + 0.22);
+    group.add(bulb);
+    bulbs.push(bMat); // store material ref for animation
+  }
+  lightRefs.push(bulbs);
+}
+
+function createIntersection(zPos) {
+  const g = new THREE.Group();
+  g.position.z = zPos;
+
+  const sideRoadMat  = new THREE.MeshLambertMaterial({ map: makeRoadTexture(), color: 0xffffff });
+  const stripeMat    = new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.82, transparent: true });
+  const stopLineMat  = new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.72, transparent: true });
+  const curbMat      = new THREE.MeshLambertMaterial({ color: 0x555555 });
+  const sidewalkMat  = new THREE.MeshLambertMaterial({ color: 0x505055 });
+
+  // ── Side-street road surfaces (left & right) ──
+  for (const side of [-1, 1]) {
+    const sr = new THREE.Mesh(
+      new THREE.PlaneGeometry(SIDE_W, INTER_HALF * 2),
+      sideRoadMat
+    );
+    sr.rotation.x = -Math.PI / 2;
+    sr.position.set(side * (ROAD_WIDTH / 2 + SIDE_W / 2), 0.004, 0);
+    g.add(sr);
+
+    // Far curb of side street
+    const fc = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, INTER_HALF * 2), curbMat);
+    fc.position.set(side * (ROAD_WIDTH / 2 + SIDE_W + 0.14), 0.09, 0);
+    g.add(fc);
+
+    // Far sidewalk of side street
+    const fsw = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.13, INTER_HALF * 2), sidewalkMat);
+    fsw.position.set(side * (ROAD_WIDTH / 2 + SIDE_W + 1.74), 0.065, 0);
+    g.add(fsw);
+
+    // Corner sidewalk pads (fill between main sidewalk and side road)
+    for (const cz of [-1, 1]) {
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.13, INTER_HALF * 2), sidewalkMat);
+      pad.position.set(side * (ROAD_WIDTH / 2 + 2.05), 0.065, 0);
+      // Only add once per side (not per cz) — skip second
+      if (cz === -1) g.add(pad);
+    }
+
+    // 2 small buildings visible down the side street
+    for (let bi = 0; bi < 2; bi++) {
+      const bw = 4 + Math.random() * 5;
+      const bh = 6 + Math.random() * 10;
+      const bd = 4 + Math.random() * 4;
+      const bx = side * (ROAD_WIDTH / 2 + SIDE_W + 3.8 + bw / 2);
+      const bz = (bi === 0 ? -INTER_HALF * 0.45 : INTER_HALF * 0.45);
+      const winTex = winTexPool[Math.floor(Math.random() * winTexPool.length)];
+      const b = new THREE.Mesh(
+        new THREE.BoxGeometry(bw, bh, bd),
+        new THREE.MeshLambertMaterial({ map: winTex, color: 0xffffff })
+      );
+      b.position.set(bx, bh / 2, bz);
+      g.add(b);
+    }
+  }
+
+  // ── Crosswalk stripes (approaching & receding) ──
+  const numStripes = 9;
+  const stripeW    = 0.72;
+  const stripeD    = 3.5;
+  for (const cz of [-(INTER_HALF - 5), (INTER_HALF - 5)]) {
+    for (let s = 0; s < numStripes; s++) {
+      const sx = -ROAD_WIDTH / 2 + 1.5 + s * ((ROAD_WIDTH - 3.0) / (numStripes - 1));
+      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(stripeW, stripeD), stripeMat);
+      stripe.rotation.x = -Math.PI / 2;
+      stripe.position.set(sx, 0.019, cz);
+      g.add(stripe);
+    }
+
+    // Stop line before each crosswalk
+    const stopZ = cz + (cz < 0 ? -2.4 : 2.4);
+    const sl = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_WIDTH, 0.42), stopLineMat);
+    sl.rotation.x = -Math.PI / 2;
+    sl.position.set(0, 0.019, stopZ);
+    g.add(sl);
+  }
+
+  // ── Traffic light poles (4 corners) ──
+  const lightRefs = [];
+  const corners = [
+    [-(ROAD_WIDTH / 2 + 2.0), -(INTER_HALF - 3)],
+    [ (ROAD_WIDTH / 2 + 2.0), -(INTER_HALF - 3)],
+    [-(ROAD_WIDTH / 2 + 2.0),  (INTER_HALF - 3)],
+    [ (ROAD_WIDTH / 2 + 2.0),  (INTER_HALF - 3)],
+  ];
+  for (const [cx, cz] of corners) {
+    buildTrafficPole(cx, cz, g, lightRefs);
+  }
+
+  g.userData.lightRefs  = lightRefs;
+  g.userData.lightState = 0;        // 0=red, 1=green, 2=yellow
+  g.userData.lightTimer = Math.random() * 10; // stagger phase between intersections
+
+  scene.add(g);
+  intersectionGrps.push({ group: g, baseZ: zPos });
+}
+
 // ── Skyline ────────────────────────────────────────────────────────────────────
 
 function createSkyline() {
@@ -579,6 +725,28 @@ export function update(dt, speed) {
   for (const bg of buildingGroups) {
     bg.group.position.z += moveZ;
     if (bg.group.position.z > 60) bg.group.position.z -= ROAD_LOOP;
+  }
+
+  // ── Intersections: scroll + recycle + animate lights ──
+  for (const ig of intersectionGrps) {
+    ig.group.position.z += moveZ;
+    if (ig.group.position.z > 60) ig.group.position.z -= ROAD_LOOP;
+
+    // Traffic light cycle: red 5s → green 4s → yellow 1s (10s total)
+    ig.group.userData.lightTimer += dt;
+    const cycle = ig.group.userData.lightTimer % 10;
+    const newState = cycle < 5 ? 0 : cycle < 9 ? 1 : 2; // 0=red,1=green,2=yellow
+    if (newState !== ig.group.userData.lightState) {
+      ig.group.userData.lightState = newState;
+      for (const bulbs of ig.group.userData.lightRefs) {
+        bulbs[0].opacity = newState === 0 ? 1.0 : 0.10; // red
+        bulbs[1].opacity = newState === 2 ? 1.0 : 0.10; // yellow
+        bulbs[2].opacity = newState === 1 ? 1.0 : 0.10; // green
+        bulbs[0].needsUpdate = true;
+        bulbs[1].needsUpdate = true;
+        bulbs[2].needsUpdate = true;
+      }
+    }
   }
 
   if (window.__skylineGroup) window.__skylineGroup.position.z += moveZ * 0.1;
