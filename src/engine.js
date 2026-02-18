@@ -706,10 +706,21 @@ function createStars() {
 
 // ── GNX player car ────────────────────────────────────────────────────────────
 
-function createGNXCar() {
+export function setPlayerCarColor(hexColor) {
+  if (!playerCar) return;
+  playerCar.traverse(obj => {
+    if (obj.isMesh && obj.material && obj.material.roughness !== undefined && obj.material.color) {
+      const c = obj.material.color.getHex();
+      // Only recolor the body panels (dark near-black materials), not chrome/glass/taillights
+      if (c <= 0x222222) obj.material.color.setHex(hexColor);
+    }
+  });
+}
+
+function createGNXCar(bodyColor = 0x0d0d0d) {
   const g = new THREE.Group();
 
-  const black  = new THREE.MeshStandardMaterial({ color: 0x0d0d0d, roughness: 0.18, metalness: 0.82 });
+  const black  = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.18, metalness: 0.82 });
   const chrome = new THREE.MeshStandardMaterial({ color: 0xbbbbbb, roughness: 0.05, metalness: 0.95 });
   const glass  = new THREE.MeshStandardMaterial({ color: 0x0a1825, roughness: 0.05, metalness: 0.1, opacity: 0.7, transparent: true });
 
@@ -806,6 +817,9 @@ function createGNXCar() {
 
 export function shakeCamera(intensity) { shakeMagnitude = intensity; }
 export function leanCamera(direction)  { cameraLean = direction * 0.06; }
+export function renderFrame() {
+  if (composer) composer.render(); else renderer.render(scene, camera);
+}
 
 // ── Update ────────────────────────────────────────────────────────────────────
 

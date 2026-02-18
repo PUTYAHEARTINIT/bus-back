@@ -218,3 +218,4 @@ export function updateHUD(score, distanceKm, pursuitPct) {
 
 export function showHUD() { if (hudEl) hudEl.style.display = 'block'; }
 export function hideHUD() { if (hudEl) hudEl.style.display = 'none';  }
+export function setChasedByLabel(text) { if (meterLabelEl) meterLabelEl.textContent = text; }
