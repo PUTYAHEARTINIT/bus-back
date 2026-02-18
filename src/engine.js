@@ -1,6 +1,9 @@
 // engine.js — Bus Back city engine
 
 import * as THREE from 'three';
+import { EffectComposer }  from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass }      from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 export let scene, camera, renderer, playerCar, roadGroup;
 
@@ -8,13 +11,17 @@ const ROAD_SEGMENT_LENGTH = 40;
 const ROAD_SEGMENT_COUNT  = 20;
 const ROAD_WIDTH          = 21;
 const ROAD_LOOP           = ROAD_SEGMENT_COUNT * ROAD_SEGMENT_LENGTH;
-const SKY_COLOR           = 0x080c14;
+const SKY_COLOR           = 0x04060e;
 
 const roadSegments    = [];
 const buildingGroups  = [];
 const intersectionGrps = [];
 let shakeMagnitude    = 0;
 let cameraLean        = 0;
+
+let composer      = null;
+let rainPosArray  = null;
+let rainGeo       = null;
 
 // ── Canvas textures ───────────────────────────────────────────────────────────
 
@@ -89,15 +96,80 @@ const BUILDING_COLORS = [
   0x6a7060, 0x607575, 0x807060, 0x686878
 ];
 
+// ── Rain texture (vertical streak per drop) ───────────────────────────────────
+
+function makeRainTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 4; cv.height = 32;
+  const ctx = cv.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 32);
+  grad.addColorStop(0.0,  'rgba(160,190,255,0)');
+  grad.addColorStop(0.3,  'rgba(160,190,255,0.85)');
+  grad.addColorStop(0.7,  'rgba(200,220,255,0.85)');
+  grad.addColorStop(1.0,  'rgba(160,190,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 4, 32);
+  return new THREE.CanvasTexture(cv);
+}
+
+function createRain() {
+  const COUNT = 3500;
+  rainPosArray = new Float32Array(COUNT * 3);
+  const camZ = -80; // seed in front of camera
+  for (let i = 0; i < COUNT; i++) {
+    rainPosArray[i*3]   = (Math.random() - 0.5) * 130;
+    rainPosArray[i*3+1] = Math.random() * 75;
+    rainPosArray[i*3+2] = camZ - Math.random() * 220;
+  }
+  rainGeo = new THREE.BufferGeometry();
+  rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPosArray, 3));
+  const mat = new THREE.PointsMaterial({
+    map: makeRainTexture(),
+    color: 0xaabbdd,
+    size: 0.55,
+    opacity: 0.32,
+    transparent: true,
+    sizeAttenuation: true,
+    depthWrite: false
+  });
+  scene.add(new THREE.Points(rainGeo, mat));
+}
+
+// ── Sky gradient backdrop ─────────────────────────────────────────────────────
+
+function createSkyGradient() {
+  const cv = document.createElement('canvas');
+  cv.width = 4; cv.height = 512;
+  const ctx = cv.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0.00, '#01020a'); // deep space
+  grad.addColorStop(0.30, '#03060f'); // night navy
+  grad.addColorStop(0.60, '#07051a'); // dark purple
+  grad.addColorStop(0.80, '#180628'); // rich purple horizon
+  grad.addColorStop(0.92, '#2a0c14'); // red-purple glow
+  grad.addColorStop(1.00, '#1a0808'); // dark orange at ground
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 4, 512);
+  const tex = new THREE.CanvasTexture(cv);
+  const sky = new THREE.Mesh(
+    new THREE.PlaneGeometry(2000, 500),
+    new THREE.MeshBasicMaterial({ map: tex, fog: false, depthWrite: false })
+  );
+  sky.renderOrder = -10;
+  sky.position.set(0, 110, -430);
+  scene.add(sky);
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function init(canvas) {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.88;
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(SKY_COLOR);
@@ -108,14 +180,17 @@ export function init(canvas) {
   camera.lookAt(0, 1.2, -20);
 
   // ── Lighting ──
-  // Strong white ambient — everything visible regardless of angle
-  scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+  // Low ambient — ACES + bloom provides brightness; too much ambient kills contrast
+  scene.add(new THREE.AmbientLight(0x223355, 0.55));
 
-  // Key light from above-front
-  const key = new THREE.DirectionalLight(0xddeeff, 2.0);
+  // Hemisphere: cool blue sky, warm orange ground bounce
+  scene.add(new THREE.HemisphereLight(0x334466, 0x221108, 1.1));
+
+  // Key directional (above-front, cool moonlight)
+  const key = new THREE.DirectionalLight(0xc8d8ff, 2.8);
   key.position.set(0, 40, 10);
   key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.mapSize.set(512, 512);
   key.shadow.camera.left = -60;
   key.shadow.camera.right = 60;
   key.shadow.camera.top = 60;
@@ -123,20 +198,21 @@ export function init(canvas) {
   key.shadow.camera.far = 200;
   scene.add(key);
 
-  // Left fill
-  const left = new THREE.DirectionalLight(0x8899bb, 1.5);
+  // Left fill (cooler blue rim)
+  const left = new THREE.DirectionalLight(0x6688cc, 1.2);
   left.position.set(-30, 20, 0);
   scene.add(left);
 
-  // Right fill
-  const right = new THREE.DirectionalLight(0xbb9977, 1.5);
+  // Right fill (warm orange city glow)
+  const right = new THREE.DirectionalLight(0xcc8833, 1.2);
   right.position.set(30, 20, 0);
   scene.add(right);
 
   // ── Textures & materials ──
   initWinTexPool();
   const roadTex = makeRoadTexture();
-  roadMat  = new THREE.MeshLambertMaterial({ map: roadTex, color: 0xffffff });
+  // MeshStandardMaterial with low roughness = wet city asphalt shimmer
+  roadMat  = new THREE.MeshStandardMaterial({ map: roadTex, color: 0x888888, roughness: 0.18, metalness: 0.14 });
   dashMat  = new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.75, transparent: true });
   curMat   = new THREE.MeshBasicMaterial({ color: 0xffdd00, opacity: 0.6, transparent: true });
 
@@ -178,6 +254,25 @@ export function init(canvas) {
   playerCar = createGNXCar();
   playerCar.position.set(0, 0.6, 0);
   scene.add(playerCar);
+
+  // ── Sky + rain ──
+  createSkyGradient();
+  createRain();
+
+  // ── Bloom composer ──
+  const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+  const bW = isMobile ? window.innerWidth  * 0.6 : window.innerWidth;
+  const bH = isMobile ? window.innerHeight * 0.6 : window.innerHeight;
+  const renderPass = new RenderPass(scene, camera);
+  const bloomPass  = new UnrealBloomPass(
+    new THREE.Vector2(bW, bH),
+    0.90,  // strength
+    0.55,  // radius
+    0.82   // threshold — only very bright pixels bloom (neons, lights)
+  );
+  composer = new EffectComposer(renderer);
+  composer.addPass(renderPass);
+  composer.addPass(bloomPass);
 
   window.addEventListener('resize', onResize);
   window.__busBackScene = scene;
@@ -751,6 +846,22 @@ export function update(dt, speed) {
 
   if (window.__skylineGroup) window.__skylineGroup.position.z += moveZ * 0.1;
 
+  // ── Rain animation ──
+  if (rainPosArray && rainGeo) {
+    const camZ = camera.position.z;
+    for (let i = 0; i < rainPosArray.length; i += 3) {
+      rainPosArray[i+1] -= 28 * dt;              // fall
+      rainPosArray[i+2] += speed * dt * 0.18;    // drift with road
+      rainPosArray[i]   -= 1.5 * dt;             // slight diagonal
+      if (rainPosArray[i+1] < -1 || rainPosArray[i+2] > camZ + 12) {
+        rainPosArray[i]   = (Math.random() - 0.5) * 130;
+        rainPosArray[i+1] = 65 + Math.random() * 15;
+        rainPosArray[i+2] = camZ - 20 - Math.random() * 200;
+      }
+    }
+    rainGeo.attributes.position.needsUpdate = true;
+  }
+
   camera.position.x += (playerCar.position.x * 0.3 - camera.position.x) * 0.05;
 
   camera.rotation.z += (cameraLean - camera.rotation.z) * 0.08;
@@ -764,11 +875,12 @@ export function update(dt, speed) {
     shakeMagnitude = 0;
   }
 
-  renderer.render(scene, camera);
+  if (composer) composer.render(); else renderer.render(scene, camera);
 }
 
 function onResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (composer) composer.setSize(window.innerWidth, window.innerHeight);
 }
