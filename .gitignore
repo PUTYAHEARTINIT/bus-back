@@ -1,0 +1,6 @@
+node_modules/
+ios/
+android/
+www/
+package-lock.json
+.vercel/

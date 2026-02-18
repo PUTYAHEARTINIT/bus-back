@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#05050a">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="assets/icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Bus Back</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: #05050a;
+  overflow: hidden;
+  position: fixed;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+#game-canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+</style>
+</head>
+<body>
+
+<canvas id="game-canvas"></canvas>
+
+<!-- Hammer.js for mobile swipe gestures -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+
+<!-- Three.js import map (ES module) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js"
+  }
+}
+</script>
+
+<!-- Speed lines overlay -->
+<canvas id="speed-lines" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:40;opacity:0;"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('speed-lines');
+  const ctx = canvas.getContext('2d');
+  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  window.setSpeedLinesIntensity = function(n) {
+    canvas.style.opacity = Math.min(0.6, n * 0.65).toString();
+  };
+
+  (function draw() {
+    requestAnimationFrame(draw);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const alpha = parseFloat(canvas.style.opacity) || 0;
+    if (alpha < 0.02) return;
+    const cx = canvas.width / 2, cy = canvas.height / 2;
+    const count = Math.floor(30 + alpha * 80);
+    ctx.lineWidth = 1;
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const inner = 60 + Math.random() * 60;
+      const outer = canvas.height * 0.6 + Math.random() * 100;
+      ctx.strokeStyle = `rgba(255,255,255,${alpha * 0.35})`;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(angle) * inner, cy + Math.sin(angle) * inner);
+      ctx.lineTo(cx + Math.cos(angle) * outer, cy + Math.sin(angle) * outer);
+      ctx.stroke();
+    }
+  })();
+})();
+</script>
+
+<!-- Error display -->
+<div id="err" style="display:none;position:fixed;top:0;left:0;width:100%;padding:20px;background:#ff0000;color:#fff;font:14px monospace;z-index:9999;white-space:pre-wrap;word-break:break-all;"></div>
+<script>
+window.onerror = function(msg, src, line, col, err) {
+  var d = document.getElementById('err');
+  d.style.display = 'block';
+  d.textContent = 'ERROR: ' + msg + '\nFile: ' + src + '\nLine: ' + line + '\n' + (err && err.stack ? err.stack : '');
+};
+window.addEventListener('unhandledrejection', function(e) {
+  var d = document.getElementById('err');
+  d.style.display = 'block';
+  d.textContent = 'PROMISE ERROR: ' + e.reason;
+});
+</script>
+
+<!-- Boot the game -->
+<script type="module">
+import { bootGame } from './src/game.js';
+
+window.addEventListener('DOMContentLoaded', () => {
+  try {
+    const canvas = document.getElementById('game-canvas');
+    bootGame(canvas);
+  } catch(e) {
+    document.getElementById('err').style.display = 'block';
+    document.getElementById('err').textContent = 'BOOT ERROR: ' + e.message + '\n' + e.stack;
+  }
+});
+</script>
+
+</body>
+</html>
