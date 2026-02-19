@@ -149,6 +149,36 @@ export function playIntro(character, onComplete) {
   runner.rotation.y = -Math.PI / 2; // face toward -x (left, toward car)
   scene.add(runner);
 
+  // ── Character portrait flash (0.8s) before runner appears ──
+  const flash = document.createElement('div');
+  flash.style.cssText = `
+    position:fixed;inset:0;z-index:99;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(0,0,0,0.88);
+    transition:opacity 0.5s ease;
+  `;
+  const flashImg = document.createElement('img');
+  flashImg.src = character.portrait;
+  flashImg.style.cssText = `
+    max-height:75vh; max-width:55vw;
+    object-fit:contain; border-radius:8px;
+    box-shadow: 0 0 60px ${character.accentColor}88;
+    animation: flashPulse 0.6s ease-out;
+  `;
+  if (!document.getElementById('flash-style')) {
+    const s = document.createElement('style');
+    s.id = 'flash-style';
+    s.textContent = `@keyframes flashPulse {
+      0%   { transform: scale(0.85); opacity: 0; }
+      60%  { transform: scale(1.04); opacity: 1; }
+      100% { transform: scale(1);    opacity: 1; }
+    }`;
+    document.head.appendChild(s);
+  }
+  flash.appendChild(flashImg);
+  document.body.appendChild(flash);
+  setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => { if (flash.parentNode) document.body.removeChild(flash); }, 500); }, 1100);
+
   // ── UI overlay ──
   const ui = buildCinematicUI(character);
   document.body.appendChild(ui);

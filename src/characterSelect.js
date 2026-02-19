@@ -1,4 +1,4 @@
-// characterSelect.js — Character selection overlay
+// characterSelect.js — Character selection overlay with real portrait art
 
 import { CHARACTERS, getUnlockedIds, checkUnlocks, getSelectedCharacter, setSelectedCharacter } from './characters.js';
 
@@ -6,52 +6,48 @@ export function showCharacterSelect(onConfirm) {
   checkUnlocks();
   const unlockedIds = getUnlockedIds();
   let selectedId = getSelectedCharacter().id;
-  // Ensure selected character is actually unlocked
   if (!unlockedIds.includes(selectedId)) selectedId = 'byron';
 
   const overlay = document.createElement('div');
   overlay.id = 'char-select';
   overlay.style.cssText = `
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(2,3,10,0.96); z-index: 200;
+    background: rgba(2,2,6,0.97); z-index: 200;
     display: flex; flex-direction: column;
     align-items: center; justify-content: flex-start;
     font-family: 'Courier New', monospace;
-    overflow-y: auto; padding: 28px 12px 28px;
+    overflow-y: auto; padding: 22px 12px 28px;
     -webkit-overflow-scrolling: touch;
   `;
 
   // Header
   const header = document.createElement('div');
-  header.style.cssText = `
-    text-align: center; margin-bottom: 6px;
-  `;
+  header.style.cssText = `text-align:center; margin-bottom:4px;`;
   header.innerHTML = `
-    <div style="font-size: clamp(10px,2vw,13px); letter-spacing: 5px; color: #ff3300; font-weight: 900; margin-bottom: 6px;">BUS BACK</div>
-    <div style="font-size: clamp(18px,4.5vw,30px); font-weight: 900; color: #fff; letter-spacing: 7px; text-shadow: 0 0 24px rgba(255,50,0,0.4);">SELECT RUNNER</div>
+    <div style="font-size:clamp(9px,1.8vw,12px);letter-spacing:6px;color:#cc2200;font-weight:900;margin-bottom:5px;">BUS BACK — THE GAME</div>
+    <div style="font-size:clamp(20px,5vw,32px);font-weight:900;color:#fff;letter-spacing:6px;
+      text-shadow:0 0 28px rgba(255,40,0,0.5);">SELECT RUNNER</div>
   `;
   overlay.appendChild(header);
 
   // Cards grid
   const grid = document.createElement('div');
   grid.style.cssText = `
-    display: flex; flex-wrap: wrap; justify-content: center;
-    gap: 12px; max-width: 860px; padding: 18px 0 10px;
+    display:flex; flex-wrap:wrap; justify-content:center;
+    gap:14px; max-width:920px; padding:16px 0 8px;
   `;
 
   function refreshCards() {
     grid.querySelectorAll('[data-id]').forEach(card => {
       const ch = CHARACTERS.find(c => c.id === card.dataset.id);
-      const isSelected = card.dataset.id === selectedId;
-      const isUnlocked = unlockedIds.includes(card.dataset.id);
-      card.style.borderColor = isSelected
-        ? ch.accentColor
-        : (isUnlocked ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)');
-      card.style.boxShadow = isSelected ? `0 0 20px ${ch.accentColor}55` : 'none';
+      const isSel = card.dataset.id === selectedId;
+      card.style.borderColor = isSel ? ch.accentColor : 'rgba(255,255,255,0.08)';
+      card.style.boxShadow   = isSel ? `0 0 24px ${ch.accentColor}66, 0 0 6px ${ch.accentColor}33` : 'none';
+      card.style.transform   = isSel ? 'scale(1.04)' : 'scale(1)';
     });
-    // Update bio
     const bio = overlay.querySelector('#char-bio');
-    if (bio) bio.textContent = CHARACTERS.find(c => c.id === selectedId)?.bio || '';
+    const ch  = CHARACTERS.find(c => c.id === selectedId);
+    if (bio && ch) bio.textContent = ch.bio;
   }
 
   for (const char of CHARACTERS) {
@@ -61,95 +57,81 @@ export function showCharacterSelect(onConfirm) {
     const card = document.createElement('div');
     card.dataset.id = char.id;
     card.style.cssText = `
-      width: clamp(135px, 26vw, 158px);
-      background: rgba(8,10,22,0.98);
-      border: 2px solid ${isSelected ? char.accentColor : (isUnlocked ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)')};
-      border-radius: 10px;
-      padding: 14px 10px 12px;
+      width: clamp(140px, 27vw, 168px);
+      border: 2px solid ${isSelected ? char.accentColor : 'rgba(255,255,255,0.08)'};
+      border-radius: 10px; overflow: hidden;
       cursor: ${isUnlocked ? 'pointer' : 'default'};
-      opacity: ${isUnlocked ? '1' : '0.42'};
-      position: relative; text-align: center;
-      box-shadow: ${isSelected ? `0 0 20px ${char.accentColor}55` : 'none'};
+      opacity: ${isUnlocked ? '1' : '0.38'};
+      position: relative;
+      box-shadow: ${isSelected ? `0 0 24px ${char.accentColor}66` : 'none'};
+      transform: ${isSelected ? 'scale(1.04)' : 'scale(1)'};
+      transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
       -webkit-tap-highlight-color: transparent;
-      transition: border-color 0.15s, box-shadow 0.15s;
+      background: #050508;
     `;
 
-    // Character silhouette icon
-    const iconWrap = document.createElement('div');
-    iconWrap.style.cssText = `
-      width: 60px; height: 76px; margin: 0 auto 10px;
-      border-radius: 6px; overflow: hidden; position: relative;
-      background: linear-gradient(160deg, ${char.accentColor}22, ${char.accentColor}66);
-      border: 1px solid ${char.accentColor}44;
+    // Portrait image — fills card top ~70%
+    const portrait = document.createElement('div');
+    portrait.style.cssText = `
+      width: 100%; padding-top: 133%;
+      position: relative; overflow: hidden;
+      background: #0a0a14;
     `;
-    // Simple CSS person silhouette
-    iconWrap.innerHTML = `
-      <div style="position:absolute;top:6px;left:50%;transform:translateX(-50%);
-        width:22px;height:22px;background:${char.skinColor ? '#' + char.skinColor.toString(16).padStart(6,'0') : '#5c3520'};
-        border-radius:50%;border:1.5px solid rgba(255,255,255,0.15);"></div>
-      <div style="position:absolute;top:30px;left:50%;transform:translateX(-50%);
-        width:30px;height:26px;background:${'#' + char.outfitColor.toString(16).padStart(6,'0')};
-        border-radius:3px 3px 0 0;"></div>
-      <div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);
-        width:34px;height:22px;background:${'#' + char.outfitColor.toString(16).padStart(6,'0')};
-        opacity:0.7;display:flex;gap:4px;align-items:flex-start;padding-top:2px;">
-        <div style="width:13px;height:20px;background:#111122;border-radius:2px;"></div>
-        <div style="width:13px;height:20px;background:#111122;border-radius:2px;"></div>
-      </div>
-      <div style="position:absolute;top:28px;left:3px;width:10px;height:18px;
-        background:${'#' + char.outfitColor.toString(16).padStart(6,'0')};border-radius:2px;"></div>
-      <div style="position:absolute;top:28px;right:3px;width:10px;height:18px;
-        background:${'#' + char.outfitColor.toString(16).padStart(6,'0')};border-radius:2px;"></div>
+    const img = document.createElement('img');
+    img.src = char.portrait;
+    img.alt = char.name;
+    img.style.cssText = `
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      object-fit: cover; object-position: top center;
+      display: block;
     `;
-    card.appendChild(iconWrap);
+    portrait.appendChild(img);
+    card.appendChild(portrait);
 
-    // Name
-    const nameEl = document.createElement('div');
-    nameEl.textContent = char.name;
-    nameEl.style.cssText = `font-size: 10px; font-weight: 900; color: #fff; letter-spacing: 1px; margin-bottom: 2px;`;
-    card.appendChild(nameEl);
+    // Info strip at bottom
+    const info = document.createElement('div');
+    info.style.cssText = `
+      padding: 8px 9px 9px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.92) 0%, rgba(5,5,15,0.99) 100%);
+      border-top: 1px solid ${char.accentColor}44;
+    `;
 
-    // Nickname
-    const nickEl = document.createElement('div');
-    nickEl.textContent = char.nickname;
-    nickEl.style.cssText = `font-size: 9px; color: ${char.accentColor}; letter-spacing: 1px; margin-bottom: 9px;`;
-    card.appendChild(nickEl);
+    // Name row
+    info.innerHTML += `
+      <div style="font-size:10px;font-weight:900;color:#fff;letter-spacing:1.5px;line-height:1.2;">${char.name}</div>
+      <div style="font-size:9px;color:${char.accentColor};letter-spacing:1px;margin-bottom:7px;">${char.nickname}</div>
+    `;
 
     // Stat bars
-    const statsWrap = document.createElement('div');
-    statsWrap.style.cssText = `display:flex;flex-direction:column;gap:4px;margin-bottom:9px;`;
-    for (const [label, val] of [['SPD', char.stats.speed], ['DEF', char.stats.defense], ['LCK', char.stats.luck]]) {
-      const row = document.createElement('div');
-      row.style.cssText = `display:flex;align-items:center;gap:5px;`;
-      row.innerHTML = `
-        <span style="font-size:8px;color:rgba(255,255,255,0.4);width:22px;">${label}</span>
-        <div style="flex:1;height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden;">
+    const statsHtml = [['SPD', char.stats.speed], ['DEF', char.stats.defense], ['LCK', char.stats.luck]].map(([lbl, val]) => `
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px;">
+        <span style="font-size:7px;color:rgba(255,255,255,0.35);width:20px;">${lbl}</span>
+        <div style="flex:1;height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;">
           <div style="height:100%;width:${val * 20}%;background:${char.accentColor};border-radius:2px;"></div>
         </div>
-      `;
-      statsWrap.appendChild(row);
-    }
-    card.appendChild(statsWrap);
+      </div>
+    `).join('');
+    info.innerHTML += statsHtml;
 
-    // Status line
-    const statusEl = document.createElement('div');
-    if (isUnlocked) {
-      statusEl.textContent = `► ${char.chasedBy}`;
-      statusEl.style.cssText = `font-size: 8px; color: ${char.accentColor}; letter-spacing: 1px; font-weight: 700;`;
-    } else {
-      statusEl.textContent = `🔒 ${char.unlockDesc}`;
-      statusEl.style.cssText = `font-size: 8px; color: #ff4444; letter-spacing: 1px; line-height: 1.4;`;
-    }
-    card.appendChild(statusEl);
+    // Status
+    info.innerHTML += `
+      <div style="font-size:8px;font-weight:700;margin-top:5px;
+        color:${isUnlocked ? char.accentColor : '#ff4444'};letter-spacing:1px;line-height:1.3;">
+        ${isUnlocked ? `► CHASED BY: ${char.chasedBy}` : `🔒 ${char.unlockDesc}`}
+      </div>
+    `;
+
+    card.appendChild(info);
 
     // Lock overlay
     if (!isUnlocked) {
       const lockEl = document.createElement('div');
       lockEl.style.cssText = `
         position:absolute;inset:0;border-radius:9px;
-        background:rgba(0,0,0,0.3);
+        background:rgba(0,0,0,0.55);
         display:flex;align-items:center;justify-content:center;
-        font-size:26px;
+        font-size:36px;
       `;
       lockEl.textContent = '🔒';
       card.appendChild(lockEl);
@@ -169,14 +151,14 @@ export function showCharacterSelect(onConfirm) {
   bio.id = 'char-bio';
   bio.textContent = CHARACTERS.find(c => c.id === selectedId)?.bio || '';
   bio.style.cssText = `
-    font-size: clamp(10px,2vw,12px); color: rgba(255,255,255,0.42);
-    letter-spacing: 1px; text-align: center; max-width: 480px;
-    padding: 0 20px; min-height: 36px; margin-bottom: 18px;
-    line-height: 1.5;
+    font-size: clamp(10px,2vw,12px); color: rgba(255,255,255,0.4);
+    letter-spacing: 1px; text-align: center; max-width: 500px;
+    padding: 0 20px; min-height: 34px; margin: 10px 0 16px;
+    line-height: 1.55;
   `;
   overlay.appendChild(bio);
 
-  // Run It button
+  // Play button
   const playBtn = document.createElement('button');
   playBtn.textContent = 'RUN IT →';
   playBtn.style.cssText = `
@@ -186,6 +168,7 @@ export function showCharacterSelect(onConfirm) {
     border-radius: 8px; cursor: pointer;
     box-shadow: 0 0 28px rgba(200,30,0,0.45);
     -webkit-tap-highlight-color: transparent;
+    margin-bottom: 20px;
   `;
   playBtn.addEventListener('click', () => {
     const char = CHARACTERS.find(c => c.id === selectedId) || CHARACTERS[0];
