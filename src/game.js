@@ -79,10 +79,9 @@ function goToCharacterSelect() {
 function onCharacterSelected(char) {
   currentChar = char;
   resumeContext();
-  // Apply character car color
   setPlayerCarColor(char.carColor);
-  // Play intro cinematic, then start game
-  playIntro(char, startGame);
+  // playIntro is async (loads texture) — await then start game
+  playIntro(char, startGame).catch(() => startGame());
 }
 
 // ── Start / Restart ──

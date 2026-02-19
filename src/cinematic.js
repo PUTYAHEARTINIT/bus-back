@@ -1,63 +1,46 @@
-// cinematic.js — Temple Run-style intro: character runs to car + gets in
+// cinematic.js — Temple Run-style intro: character sprite runs to car + gets in
 
 import * as THREE from 'three';
-import { scene, camera, renderer } from './engine.js';
-import { renderFrame } from './engine.js';
+import { scene, camera, renderFrame } from './engine.js';
 
-// ── Build a low-poly humanoid runner ─────────────────────────────────────────
+// ── Build a sprite billboard from the character's portrait image ──────────────
+// The illustration art IS the character — no box model, no mismatched colors.
+// A TextureLoader loads the PNG, applied to a plane that always faces the camera.
 
-function buildRunner(skinHex, outfitHex) {
-  const g = new THREE.Group();
+function buildSpriteRunner(portraitSrc) {
+  return new Promise((resolve) => {
+    const loader = new THREE.TextureLoader();
+    loader.load(portraitSrc, (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
 
-  const skin   = new THREE.MeshLambertMaterial({ color: skinHex });
-  const outfit = new THREE.MeshLambertMaterial({ color: outfitHex });
-  const pants  = new THREE.MeshLambertMaterial({ color: 0x111122 });
-  const shoe   = new THREE.MeshLambertMaterial({ color: 0x0d0d0d });
+      // Portrait images are roughly 3:4 ratio
+      const aspect = tex.image ? tex.image.width / tex.image.height : 0.75;
+      const height = 2.2;
+      const width  = height * aspect;
 
-  // Head
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.40, 0.36), skin);
-  head.position.y = 1.72; head.castShadow = true;
-  g.add(head);
+      const mat = new THREE.MeshBasicMaterial({
+        map: tex,
+        transparent: true,
+        alphaTest: 0.05,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
 
-  // Torso
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.65, 0.26), outfit);
-  torso.position.y = 1.08; torso.castShadow = true;
-  g.add(torso);
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
+      mesh.position.y = height / 2; // sit on ground
 
-  // Arms — pivoted at shoulder so rotation looks natural
-  const makeArm = (side) => {
-    const pivot = new THREE.Group();
-    pivot.position.set(side * 0.35, 1.35, 0);
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.52, 6), outfit);
-    arm.position.y = -0.26;
-    pivot.add(arm);
-    g.add(pivot);
-    return pivot;
-  };
-  const lArmPivot = makeArm(-1);
-  const rArmPivot = makeArm( 1);
+      // The sprite always faces the camera — done manually each frame
+      mesh.userData.isSprite = true;
 
-  // Legs — pivoted at hip
-  const makeLeg = (side) => {
-    const pivot = new THREE.Group();
-    pivot.position.set(side * 0.15, 0.76, 0);
-    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.09, 0.42, 6), pants);
-    upper.position.y = -0.21;
-    const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.38, 6), pants);
-    lower.position.y = -0.59;
-    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.10, 0.28), shoe);
-    sh.position.set(0, -0.78, 0.05);
-    pivot.add(upper, lower, sh);
-    g.add(pivot);
-    return pivot;
-  };
-  const lLegPivot = makeLeg(-1);
-  const rLegPivot = makeLeg( 1);
-
-  // Store pivots for animation
-  g.userData = { lArmPivot, rArmPivot, lLegPivot, rLegPivot };
-
-  return g;
+      resolve(mesh);
+    }, undefined, () => {
+      // Fallback if image fails to load: simple colored box
+      const mat = new THREE.MeshLambertMaterial({ color: 0xcc1111 });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.9, 0.25), mat);
+      mesh.position.y = 0.95;
+      resolve(mesh);
+    });
+  });
 }
 
 // ── Cinematic text overlay ────────────────────────────────────────────────────
@@ -70,169 +53,120 @@ function buildCinematicUI(char) {
     font-family: 'Courier New', monospace;
   `;
 
-  // Vignette
-  el.innerHTML += `
+  el.innerHTML = `
     <div style="position:absolute;inset:0;
-      background:radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.7) 100%);
-      pointer-events:none;"></div>
-  `;
+      background:radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.65) 100%);"></div>
 
-  // Character name — center top
-  el.innerHTML += `
     <div id="cin-name" style="
-      position:absolute; top: 13%; left: 50%; transform: translateX(-50%);
-      font-size: clamp(26px, 6.5vw, 50px); font-weight: 900; color: #fff;
-      letter-spacing: 8px; text-shadow: 2px 2px 0 rgba(0,0,0,0.8), 0 0 30px rgba(255,255,255,0.2);
-      opacity: 0; transition: opacity 0.55s ease; white-space: nowrap;
+      position:absolute; top:12%; left:50%; transform:translateX(-50%);
+      font-size:clamp(24px,6vw,48px); font-weight:900; color:#fff;
+      letter-spacing:8px; white-space:nowrap;
+      text-shadow:2px 2px 0 rgba(0,0,0,0.9), 0 0 30px rgba(255,255,255,0.15);
+      opacity:0; transition:opacity 0.55s ease;
     ">${char.name.toUpperCase()}</div>
-  `;
 
-  // Nickname
-  el.innerHTML += `
     <div id="cin-nick" style="
-      position: absolute; top: 13%; left: 50%;
-      transform: translate(-50%, clamp(44px, 9vw, 68px));
-      font-size: clamp(13px, 2.8vw, 20px); font-weight: 700;
-      color: ${char.accentColor}; letter-spacing: 5px;
-      text-shadow: 0 0 16px ${char.accentColor}88;
-      opacity: 0; transition: opacity 0.55s ease;
+      position:absolute; top:12%; left:50%;
+      transform:translate(-50%, clamp(42px,9vw,66px));
+      font-size:clamp(12px,2.6vw,19px); font-weight:700;
+      color:${char.accentColor}; letter-spacing:5px;
+      text-shadow:0 0 16px ${char.accentColor}99;
+      opacity:0; transition:opacity 0.5s ease;
     ">${char.nickname}</div>
-  `;
 
-  // Origin
-  el.innerHTML += `
     <div id="cin-origin" style="
-      position: absolute; top: 13%; left: 50%;
-      transform: translate(-50%, clamp(64px, 13vw, 102px));
-      font-size: clamp(9px, 1.8vw, 13px); color: rgba(255,255,255,0.45);
-      letter-spacing: 4px;
-      opacity: 0; transition: opacity 0.4s ease;
+      position:absolute; top:12%; left:50%;
+      transform:translate(-50%, clamp(64px,13vw,98px));
+      font-size:clamp(8px,1.7vw,12px); color:rgba(255,255,255,0.4);
+      letter-spacing:4px;
+      opacity:0; transition:opacity 0.4s ease;
     ">ORIGIN: ${char.origin.toUpperCase()}</div>
-  `;
 
-  // Chased by — bottom
-  el.innerHTML += `
     <div id="cin-chased" style="
-      position: absolute; bottom: 16%; left: 50%; transform: translateX(-50%);
-      font-size: clamp(10px, 2.2vw, 15px); font-weight: 900;
-      color: #ff3300; letter-spacing: 4px;
-      text-shadow: 0 0 12px rgba(255,50,0,0.6);
-      opacity: 0; transition: opacity 0.4s ease;
+      position:absolute; bottom:15%; left:50%; transform:translateX(-50%);
+      font-size:clamp(10px,2.1vw,15px); font-weight:900;
+      color:#ff3300; letter-spacing:4px;
+      text-shadow:0 0 12px rgba(255,50,0,0.7);
+      opacity:0; transition:opacity 0.4s ease;
     ">CHASED BY: ${char.chasedBy}</div>
-  `;
 
-  // Progress bar
-  el.innerHTML += `
-    <div style="position:absolute;bottom:0;left:0;width:100%;height:3px;background:rgba(255,255,255,0.06);">
+    <div style="position:absolute;bottom:0;left:0;width:100%;height:3px;background:rgba(255,255,255,0.05);">
       <div id="cin-bar" style="height:100%;width:0%;background:${char.accentColor};
-        box-shadow: 0 0 8px ${char.accentColor};
-        transition: width 3.8s linear;"></div>
+        box-shadow:0 0 8px ${char.accentColor};transition:width 4.0s linear;"></div>
     </div>
   `;
-
   return el;
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function playIntro(character, onComplete) {
-  const DURATION = 4.0; // seconds total
+export async function playIntro(character, onComplete) {
+  const DURATION = 4.2;
 
-  // ── Cinematic camera (side-angle wide shot) ──
+  // Store original camera
   const origPos = camera.position.clone();
-  camera.position.set(-16, 4.2, 6);
-  camera.lookAt(1, 0.8, -2);
 
-  // ── Runner ──
-  const runner = buildRunner(character.skinColor, character.outfitColor);
-  runner.position.set(18, 0, -1.8);
-  runner.rotation.y = -Math.PI / 2; // face toward -x (left, toward car)
+  // Cinematic wide-angle side shot
+  camera.position.set(-16, 4.0, 6);
+  camera.lookAt(1, 1.0, -1);
+
+  // Load sprite from the character's actual illustration
+  const runner = await buildSpriteRunner(character.portrait);
+  runner.position.set(18, 0, -1.5);
   scene.add(runner);
 
-  // ── Character portrait flash (0.8s) before runner appears ──
-  const flash = document.createElement('div');
-  flash.style.cssText = `
-    position:fixed;inset:0;z-index:99;
-    display:flex;align-items:center;justify-content:center;
-    background:rgba(0,0,0,0.88);
-    transition:opacity 0.5s ease;
-  `;
-  const flashImg = document.createElement('img');
-  flashImg.src = character.portrait;
-  flashImg.style.cssText = `
-    max-height:75vh; max-width:55vw;
-    object-fit:contain; border-radius:8px;
-    box-shadow: 0 0 60px ${character.accentColor}88;
-    animation: flashPulse 0.6s ease-out;
-  `;
-  if (!document.getElementById('flash-style')) {
-    const s = document.createElement('style');
-    s.id = 'flash-style';
-    s.textContent = `@keyframes flashPulse {
-      0%   { transform: scale(0.85); opacity: 0; }
-      60%  { transform: scale(1.04); opacity: 1; }
-      100% { transform: scale(1);    opacity: 1; }
-    }`;
-    document.head.appendChild(s);
-  }
-  flash.appendChild(flashImg);
-  document.body.appendChild(flash);
-  setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => { if (flash.parentNode) document.body.removeChild(flash); }, 500); }, 1100);
-
-  // ── UI overlay ──
+  // UI overlay
   const ui = buildCinematicUI(character);
   document.body.appendChild(ui);
 
-  // Stagger text fade-ins
-  setTimeout(() => { const el = document.getElementById('cin-name'); if (el) el.style.opacity = '1'; }, 250);
-  setTimeout(() => { const el = document.getElementById('cin-nick'); if (el) el.style.opacity = '1'; }, 450);
-  setTimeout(() => { const el = document.getElementById('cin-origin'); if (el) el.style.opacity = '1'; }, 650);
-  setTimeout(() => { const el = document.getElementById('cin-chased'); if (el) el.style.opacity = '1'; }, 1200);
-  // Progress bar
-  setTimeout(() => { const b = document.getElementById('cin-bar'); if (b) b.style.width = '100%'; }, 30);
+  // Stagger text fades
+  setTimeout(() => { const e = document.getElementById('cin-name');   if (e) e.style.opacity = '1'; }, 200);
+  setTimeout(() => { const e = document.getElementById('cin-nick');   if (e) e.style.opacity = '1'; }, 380);
+  setTimeout(() => { const e = document.getElementById('cin-origin'); if (e) e.style.opacity = '1'; }, 560);
+  setTimeout(() => { const e = document.getElementById('cin-chased'); if (e) e.style.opacity = '1'; }, 1100);
+  setTimeout(() => { const b = document.getElementById('cin-bar');    if (b) b.style.width   = '100%'; }, 30);
 
   let t = 0;
   let lastTS = null;
 
   function loop(ts) {
     if (!lastTS) lastTS = ts;
-    const dt = Math.min((ts - lastTS) / 1000, 0.05);
+    const dt  = Math.min((ts - lastTS) / 1000, 0.05);
     lastTS = ts;
     t += dt;
 
     const prog = Math.min(t / DURATION, 1);
-    const { lArmPivot, rArmPivot, lLegPivot, rLegPivot } = runner.userData;
+
+    // Always face camera (billboard behavior)
+    if (runner.userData.isSprite) {
+      runner.lookAt(camera.position);
+    }
 
     if (prog < 0.80) {
-      // ── Running phase ──
-      const p = prog / 0.80;
-      const ease = 1 - Math.pow(1 - p, 2.2); // ease-in quad
+      // ── Running phase: sprite slides toward car ──
+      const p    = prog / 0.80;
+      const ease = 1 - Math.pow(1 - p, 2.2);
       runner.position.x = 18 - ease * 20; // 18 → -2
 
-      const freq = 9;
-      const amp  = 0.75;
-      const cyc  = Math.sin(t * freq);
-      lArmPivot.rotation.x =  cyc * amp;
-      rArmPivot.rotation.x = -cyc * amp;
-      lLegPivot.rotation.x = -cyc * amp * 0.85;
-      rLegPivot.rotation.x =  cyc * amp * 0.85;
+      // Bob vertically (simulate running rhythm)
+      runner.position.y = Math.abs(Math.sin(t * 9 * 0.5)) * 0.18;
 
-      // Vertical run bob
-      runner.position.y = Math.max(0, Math.abs(Math.sin(t * freq * 0.5)) * 0.14);
+      // Slight left-right sway (running energy)
+      runner.rotation.z = Math.sin(t * 9) * 0.04;
 
-    } else if (prog < 0.92) {
-      // ── Getting in — shrink into car ──
-      const p = (prog - 0.80) / 0.12;
+    } else if (prog < 0.93) {
+      // ── Getting in: shrink sprite into car ──
+      const p = (prog - 0.80) / 0.13;
       const s = Math.max(1 - p, 0.001);
       runner.scale.setScalar(s);
       runner.position.x = -2;
-      runner.position.y = 0.6 * (1 - p);
+      runner.position.y = 0.9 * (1 - p);
 
     } else {
       // ── Camera eases back to gameplay position ──
-      const p = (prog - 0.92) / 0.08;
+      const p = (prog - 0.93) / 0.07;
       camera.position.lerpVectors(
-        new THREE.Vector3(-16, 4.2, 6),
+        new THREE.Vector3(-16, 4.0, 6),
         origPos,
         p
       );
@@ -244,16 +178,12 @@ export function playIntro(character, onComplete) {
     if (prog < 1) {
       requestAnimationFrame(loop);
     } else {
-      // ── Clean up ──
       scene.remove(runner);
-      runner.traverse(obj => {
-        if (obj.isMesh) { obj.geometry.dispose(); obj.material.dispose(); }
-      });
+      runner.geometry?.dispose();
+      runner.material?.dispose();
       if (ui.parentNode) document.body.removeChild(ui);
-
       camera.position.copy(origPos);
       camera.lookAt(0, 1.2, -20);
-
       onComplete();
     }
   }
