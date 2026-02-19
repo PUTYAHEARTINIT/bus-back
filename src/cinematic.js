@@ -1,11 +1,10 @@
-// cinematic.js — Temple Run-style intro: character sprite runs to car + gets in
+// cinematic.js — Temple Run-style intro: character runs to car + gets in
+// Priority: GLTF 3D model (Meshy.ai → Mixamo .glb) → portrait sprite fallback
 
 import * as THREE from 'three';
-import { scene, camera, renderFrame } from './engine.js';
+import { scene, camera, renderFrame, loadCharacterModel } from './engine.js';
 
-// ── Build a sprite billboard from the character's portrait image ──────────────
-// The illustration art IS the character — no box model, no mismatched colors.
-// A TextureLoader loads the PNG, applied to a plane that always faces the camera.
+// ── Sprite billboard fallback (portrait PNG on a camera-facing plane) ──────────
 
 function buildSpriteRunner(portraitSrc) {
   return new Promise((resolve) => {
@@ -13,7 +12,6 @@ function buildSpriteRunner(portraitSrc) {
     loader.load(portraitSrc, (tex) => {
       tex.colorSpace = THREE.SRGBColorSpace;
 
-      // Portrait images are roughly 3:4 ratio
       const aspect = tex.image ? tex.image.width / tex.image.height : 0.75;
       const height = 2.2;
       const width  = height * aspect;
@@ -27,20 +25,73 @@ function buildSpriteRunner(portraitSrc) {
       });
 
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
-      mesh.position.y = height / 2; // sit on ground
-
-      // The sprite always faces the camera — done manually each frame
+      mesh.position.y = height / 2;
       mesh.userData.isSprite = true;
-
       resolve(mesh);
     }, undefined, () => {
-      // Fallback if image fails to load: simple colored box
+      // Last-resort fallback: colored box
       const mat = new THREE.MeshLambertMaterial({ color: 0xcc1111 });
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.9, 0.25), mat);
       mesh.position.y = 0.95;
+      mesh.userData.isSprite = true;
       resolve(mesh);
     });
   });
+}
+
+// ── GLTF runner (Meshy.ai model + Mixamo "Running" animation) ─────────────────
+
+async function buildGLTFRunner(modelPath) {
+  const gltf = await loadCharacterModel(modelPath);
+  const root = gltf.scene;
+
+  // Normalize height to ~2.2 units so it matches sprite scale
+  const box  = new THREE.Box3().setFromObject(root);
+  const size = box.getSize(new THREE.Vector3());
+  const sc   = 2.2 / Math.max(size.y, 0.001);
+  root.scale.setScalar(sc);
+
+  // Ground the model (move feet to y=0)
+  box.setFromObject(root);
+  root.position.y = -box.min.y;
+
+  // Shadows on all meshes
+  root.traverse(obj => {
+    if (obj.isMesh) {
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+    }
+  });
+
+  // Set up AnimationMixer — first clip is assumed to be the run cycle (Mixamo)
+  let mixer = null;
+  if (gltf.animations && gltf.animations.length > 0) {
+    mixer = new THREE.AnimationMixer(root);
+    // Try to find a clip named "run" or "Run", otherwise use clip 0
+    const runClip =
+      THREE.AnimationClip.findByName(gltf.animations, 'Run') ||
+      THREE.AnimationClip.findByName(gltf.animations, 'run') ||
+      THREE.AnimationClip.findByName(gltf.animations, 'Running') ||
+      gltf.animations[0];
+    mixer.clipAction(runClip).play();
+  }
+
+  root.userData.isGLTF = true;
+  root.userData.mixer  = mixer;
+  return root;
+}
+
+// ── Build the right runner for this character ─────────────────────────────────
+
+async function buildRunner(char) {
+  if (char.model) {
+    try {
+      return await buildGLTFRunner(char.model);
+    } catch (e) {
+      console.warn(`[cinematic] GLTF load failed for ${char.id}, using sprite fallback:`, e.message || e);
+    }
+  }
+  return buildSpriteRunner(char.portrait);
 }
 
 // ── Cinematic text overlay ────────────────────────────────────────────────────
@@ -110,10 +161,12 @@ export async function playIntro(character, onComplete) {
   camera.position.set(-16, 4.0, 6);
   camera.lookAt(1, 1.0, -1);
 
-  // Load sprite from the character's actual illustration
-  const runner = await buildSpriteRunner(character.portrait);
+  // Load runner — GLTF with Mixamo animation if available, sprite otherwise
+  const runner = await buildRunner(character);
   runner.position.set(18, 0, -1.5);
   scene.add(runner);
+  // Cache the initial scale so the "get in" shrink phase can scale from it cleanly
+  const baseScale = runner.scale.x;
 
   // UI overlay
   const ui = buildCinematicUI(character);
@@ -126,7 +179,7 @@ export async function playIntro(character, onComplete) {
   setTimeout(() => { const e = document.getElementById('cin-chased'); if (e) e.style.opacity = '1'; }, 1100);
   setTimeout(() => { const b = document.getElementById('cin-bar');    if (b) b.style.width   = '100%'; }, 30);
 
-  let t = 0;
+  let t      = 0;
   let lastTS = null;
 
   function loop(ts) {
@@ -137,33 +190,43 @@ export async function playIntro(character, onComplete) {
 
     const prog = Math.min(t / DURATION, 1);
 
-    // Always face camera (billboard behavior)
-    if (runner.userData.isSprite) {
+    // ── Animate GLTF mixer (Mixamo run cycle) ──
+    if (runner.userData.mixer) {
+      runner.userData.mixer.update(dt);
+    }
+
+    // ── Billboard facing for sprite fallback ──
+    if (runner.userData.isSprite && !runner.userData.isGLTF) {
       runner.lookAt(camera.position);
     }
 
     if (prog < 0.80) {
-      // ── Running phase: sprite slides toward car ──
+      // Running phase: slide toward car
       const p    = prog / 0.80;
       const ease = 1 - Math.pow(1 - p, 2.2);
       runner.position.x = 18 - ease * 20; // 18 → -2
 
-      // Bob vertically (simulate running rhythm)
-      runner.position.y = Math.abs(Math.sin(t * 9 * 0.5)) * 0.18;
-
-      // Slight left-right sway (running energy)
-      runner.rotation.z = Math.sin(t * 9) * 0.04;
+      if (runner.userData.isGLTF) {
+        // GLTF: face the direction of travel (toward car / camera)
+        runner.rotation.y = Math.PI; // face left = toward car
+        // Subtle ground bob driven by run speed
+        runner.position.y = Math.abs(Math.sin(t * 8)) * 0.08;
+      } else {
+        // Sprite: bob + sway
+        runner.position.y = Math.abs(Math.sin(t * 9 * 0.5)) * 0.18;
+        runner.rotation.z = Math.sin(t * 9) * 0.04;
+      }
 
     } else if (prog < 0.93) {
-      // ── Getting in: shrink sprite into car ──
+      // Getting in: shrink into car
       const p = (prog - 0.80) / 0.13;
       const s = Math.max(1 - p, 0.001);
-      runner.scale.setScalar(s);
+      runner.scale.setScalar(baseScale * s);
       runner.position.x = -2;
       runner.position.y = 0.9 * (1 - p);
 
     } else {
-      // ── Camera eases back to gameplay position ──
+      // Camera eases back to gameplay position
       const p = (prog - 0.93) / 0.07;
       camera.position.lerpVectors(
         new THREE.Vector3(-16, 4.0, 6),
@@ -178,9 +241,16 @@ export async function playIntro(character, onComplete) {
     if (prog < 1) {
       requestAnimationFrame(loop);
     } else {
+      // Cleanup
       scene.remove(runner);
-      runner.geometry?.dispose();
-      runner.material?.dispose();
+      runner.traverse(obj => {
+        if (obj.isMesh) {
+          obj.geometry?.dispose();
+          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+          else obj.material?.dispose();
+        }
+      });
+      if (runner.userData.mixer) runner.userData.mixer.stopAllAction();
       if (ui.parentNode) document.body.removeChild(ui);
       camera.position.copy(origPos);
       camera.lookAt(0, 1.2, -20);

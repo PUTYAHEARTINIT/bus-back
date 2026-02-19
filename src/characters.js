@@ -1,5 +1,7 @@
 // characters.js — Character roster, unlock logic, persistence
 
+// model: path to a .glb file generated via Meshy.ai + Mixamo running animation.
+// If the file doesn't exist the cinematic auto-falls back to the portrait sprite.
 export const CHARACTERS = [
   {
     id: 'byron',
@@ -8,6 +10,7 @@ export const CHARACTERS = [
     origin: 'Eastside Projects',
     chasedBy: 'RIVAL GANG',
     portrait: 'assets/characters/byron.png',
+    model: 'assets/characters/byron.glb',    // drop Meshy+Mixamo .glb here
     carColor: 0x8B0000,
     skinColor: 0x3d2314,
     outfitColor: 0xcc1111,
@@ -24,6 +27,7 @@ export const CHARACTERS = [
     origin: 'Boyle Heights',
     chasedBy: 'OBSESSIVE EX',
     portrait: 'assets/characters/maria.png',
+    model: 'assets/characters/maria.glb',
     carColor: 0x8B2200,
     skinColor: 0xc07840,
     outfitColor: 0xaa2200,
@@ -40,6 +44,7 @@ export const CHARACTERS = [
     origin: 'Uptown Heights',
     chasedBy: 'JEALOUS RIVALS',
     portrait: 'assets/characters/crissie.png',
+    model: 'assets/characters/crissie.glb',
     carColor: 0x003366,
     skinColor: 0x5c3520,
     outfitColor: 0x0055aa,
@@ -58,6 +63,7 @@ export const CHARACTERS = [
     origin: 'South Side',
     chasedBy: 'RIVAL CREW',
     portrait: 'assets/characters/luis.png',
+    model: 'assets/characters/luis.glb',
     carColor: 0x2a1a08,
     skinColor: 0x8B5E3C,
     outfitColor: 0x445533,
@@ -76,6 +82,7 @@ export const CHARACTERS = [
     origin: 'Uptown Dog Park District',
     chasedBy: 'ALLEY CATS',
     portrait: 'assets/characters/mack.png',
+    model: 'assets/characters/mack.glb',
     carColor: 0xcc8800,
     skinColor: 0xcc8800,
     outfitColor: 0xcc6600,

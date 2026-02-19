@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { EffectComposer }  from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass }      from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { GLTFLoader }      from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 export let scene, camera, renderer, playerCar, roadGroup;
 
@@ -819,6 +820,17 @@ export function shakeCamera(intensity) { shakeMagnitude = intensity; }
 export function leanCamera(direction)  { cameraLean = direction * 0.06; }
 export function renderFrame() {
   if (composer) composer.render(); else renderer.render(scene, camera);
+}
+
+// ── GLTF model loader ─────────────────────────────────────────────────────────
+// Returns a Promise<GLTF>. Use gltf.scene for the mesh, gltf.animations for clips.
+
+const _gltfLoader = new GLTFLoader();
+
+export function loadCharacterModel(path) {
+  return new Promise((resolve, reject) => {
+    _gltfLoader.load(path, resolve, undefined, reject);
+  });
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
