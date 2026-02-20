@@ -26,9 +26,9 @@ export function showStartScreen(onStart) {
   startScreen.id = 'start-screen';
   startScreen.style.cssText = `
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(5,5,10,0.94);
+    background: url('assets/title-card.png') center center / cover no-repeat;
     display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
+    align-items: center; justify-content: flex-end;
     z-index: 200; font-family: 'Courier New', monospace;
     animation: fadeIn 0.5s ease;
     cursor: pointer;
@@ -36,31 +36,19 @@ export function showStartScreen(onStart) {
 
   startScreen.innerHTML = `
     <div style="
-      font-size: clamp(52px, 13vw, 100px);
-      font-weight: 900; letter-spacing: 8px;
-      color: #ffffff;
-      text-shadow: 0 0 40px rgba(255,50,50,0.8), 0 4px 0 rgba(180,0,0,0.6);
-      margin-bottom: 10px; text-align: center; line-height: 1;
-    ">BUS BACK</div>
-
-    <div style="
-      font-size: clamp(11px, 2.8vw, 17px);
-      color: rgba(255,255,255,0.45);
-      letter-spacing: 7px; margin-bottom: 64px;
-      text-transform: uppercase;
-    ">Don't Get Caught</div>
-
-    <div style="
-      font-size: clamp(13px, 3vw, 17px);
-      color: rgba(255,255,255,0.7); letter-spacing: 3px;
+      font-size: clamp(15px, 3.5vw, 20px);
+      color: #ffffff; letter-spacing: 4px; font-weight: 900;
+      text-shadow: 0 0 20px rgba(0,0,0,0.9), 0 2px 4px rgba(0,0,0,0.8);
       animation: tapBlink 1.2s infinite;
+      margin-bottom: 120px;
     ">TAP TO START</div>
 
     <div style="
-      position: absolute; bottom: 36px;
       font-size: clamp(10px, 1.8vw, 12px);
-      color: rgba(255,255,255,0.22);
+      color: rgba(255,255,255,0.7);
+      text-shadow: 0 0 10px rgba(0,0,0,0.9), 0 1px 3px rgba(0,0,0,0.8);
       letter-spacing: 2px; text-align: center; line-height: 1.8;
+      margin-bottom: 36px;
     ">← → LANES &nbsp;|&nbsp; ↑ JUMP &nbsp;|&nbsp; ↓ DUCK<br>SWIPE ON MOBILE</div>
   `;
 
