@@ -26,7 +26,7 @@ export function showStartScreen(onStart) {
   startScreen.id = 'start-screen';
   startScreen.style.cssText = `
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: url('assets/title-card.png') center center / cover no-repeat;
+    background: #1a0f08 url('assets/title-card.png') center center / contain no-repeat;
     display: flex; flex-direction: column;
     align-items: center; justify-content: flex-end;
     z-index: 200; font-family: 'Courier New', monospace;
